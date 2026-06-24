@@ -12,28 +12,52 @@
 // limitations under the License.
 
 import Foundation
-import NIOCore
+import NIOConcurrencyHelpers
 
 internal final class RttCommand: Sendable {
+    private enum State {
+        case pending
+        case ready(TimeInterval)
+        case waiting(CheckedContinuation<TimeInterval, Never>)
+    }
+
     let startTime = DispatchTime.now()
-    let promise: EventLoopPromise<TimeInterval>?
+    private let state = NIOLockedValueBox<State>(.pending)
 
-    static func makeFrom(channel: Channel?) -> RttCommand {
-        RttCommand(promise: channel?.eventLoop.makePromise(of: TimeInterval.self))
+    static func makeFrom() -> RttCommand {
+        RttCommand()
     }
 
-    private init(promise: EventLoopPromise<TimeInterval>?) {
-        self.promise = promise
-    }
+    private init() {}
 
     func setRoundTripTime() {
         let now = DispatchTime.now()
         let nanoTime = now.uptimeNanoseconds - startTime.uptimeNanoseconds
         let rtt = TimeInterval(nanoTime) / 1_000_000_000  // Convert nanos to seconds
-        promise?.succeed(rtt)
+
+        let continuation = state.withLockedValue { current -> CheckedContinuation<TimeInterval, Never>? in
+            if case .waiting(let continuation) = current {
+                current = .ready(rtt)
+                return continuation
+            }
+            current = .ready(rtt)
+            return nil
+        }
+        continuation?.resume(returning: rtt)
     }
 
     func getRoundTripTime() async throws -> TimeInterval {
-        try await promise?.futureResult.get() ?? 0
+        return await withCheckedContinuation { (continuation: CheckedContinuation<TimeInterval, Never>) in
+            let immediateResult = state.withLockedValue { current -> TimeInterval? in
+                if case .ready(let rtt) = current {
+                    return rtt
+                }
+                current = .waiting(continuation)
+                return nil
+            }
+            if let immediateResult {
+                continuation.resume(returning: immediateResult)
+            }
+        }
     }
 }

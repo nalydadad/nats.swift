@@ -13,116 +13,73 @@
 
 import Foundation
 import NIO
-import NIOConcurrencyHelpers
+import NIOFoundationCompat
 
-extension BatchBuffer {
-    struct State: Sendable {
-        private var buffer: ByteBuffer
-        private var allocator: ByteBufferAllocator
-        var waitingPromises: [(ClientOp, UnsafeContinuation<Void, Error>)] = []
-        var isWriteInProgress: Bool = false
-
-        internal init(allocator: ByteBufferAllocator, batchSize: Int = 16 * 1024) {
-            self.allocator = allocator
-            self.buffer = allocator.buffer(capacity: batchSize)
-        }
-
-        var readableBytes: Int {
-            return self.buffer.readableBytes
-        }
-
-        mutating func clear() {
-            buffer.clear()
-        }
-
-        mutating func getWriteBuffer() -> ByteBuffer {
-            var writeBuffer = allocator.buffer(capacity: buffer.readableBytes)
-            writeBuffer.writeBytes(buffer.readableBytesView)
-            buffer.clear()
-
-            return writeBuffer
-        }
-
-        mutating func writeMessage(_ message: ClientOp) {
-            self.buffer.writeClientOp(message)
-        }
-    }
-}
-
-internal final class BatchBuffer: Sendable {
+/// Batches `ClientOp` writes into a single `transport.send()` call when
+/// possible, so concurrent publishers don't each pay a full write round-trip.
+/// `ByteBuffer` is kept here purely as an in-memory accumulation buffer
+/// (never touches a socket directly) before being copied out as `Data` for
+/// the transport to send.
+internal actor BatchBuffer {
     private let batchSize: Int
-    private let channel: Channel
-    private let state: NIOLockedValueBox<State>
+    private let transport: any NatsTransport
+    private let allocator = ByteBufferAllocator()
+    private var buffer: ByteBuffer
+    private var waitingMessages: [(ClientOp, UnsafeContinuation<Void, Error>)] = []
+    private var isWriteInProgress = false
 
-    init(channel: Channel, batchSize: Int = 16 * 1024) {
+    init(transport: any NatsTransport, batchSize: Int = 16 * 1024) {
+        self.transport = transport
         self.batchSize = batchSize
-        self.channel = channel
-        self.state = .init(
-            State(allocator: channel.allocator)
-        )
+        self.buffer = allocator.buffer(capacity: batchSize)
     }
 
     func writeMessage(_ message: ClientOp) async throws {
-        #if SWIFT_NATS_BATCH_BUFFER_DISABLED
-            let b = channel.allocator.buffer(bytes: data)
-            try await channel.writeAndFlush(b)
-        #else
-            // Batch writes and if we have more than the batch size
-            // already in the buffer await until buffer is flushed
-            // to handle any back pressure
+        guard buffer.readableBytes < batchSize else {
             try await withUnsafeThrowingContinuation { continuation in
-                self.state.withLockedValue { state in
-                    guard state.readableBytes < self.batchSize else {
-                        state.waitingPromises.append((message, continuation))
-                        return
-                    }
-
-                    state.writeMessage(message)
-                    self.flushWhenIdle(state: &state)
-                    continuation.resume()
-                }
-
+                waitingMessages.append((message, continuation))
             }
-        #endif
-    }
-
-    private func flushWhenIdle(state: inout State) {
-        // The idea is to keep writing to the buffer while a writeAndFlush() is
-        // in progress, so we can batch as many messages as possible.
-        guard !state.isWriteInProgress else {
             return
         }
-        // We need a separate write buffer so we can free the message buffer for more
-        // messages to be collected.
-        let writeBuffer = state.getWriteBuffer()
-        state.isWriteInProgress = true
 
-        let writePromise = self.channel.eventLoop.makePromise(of: Void.self)
-        writePromise.futureResult.whenComplete { result in
-            self.state.withLockedValue { state in
-                state.isWriteInProgress = false
-                switch result {
-                case .success:
-                    for (message, continuation) in state.waitingPromises {
-                        state.writeMessage(message)
-                        continuation.resume()
-                    }
-                    state.waitingPromises.removeAll()
-                case .failure(let error):
-                    for (_, continuation) in state.waitingPromises {
-                        continuation.resume(throwing: error)
-                    }
-                    state.waitingPromises.removeAll()
-                    state.clear()
-                }
+        buffer.writeClientOp(message)
+        await flushWhenIdle()
+    }
 
-                // Check if there are any pending flushes
-                if state.readableBytes > 0 {
-                    self.flushWhenIdle(state: &state)
-                }
-            }
+    private func flushWhenIdle() async {
+        // The idea is to keep writing to the buffer while a send() is in
+        // progress, so we can batch as many messages as possible.
+        guard !isWriteInProgress else {
+            return
         }
 
-        self.channel.writeAndFlush(writeBuffer, promise: writePromise)
+        var writeBuffer = allocator.buffer(capacity: buffer.readableBytes)
+        writeBuffer.writeBytes(buffer.readableBytesView)
+        buffer.clear()
+        isWriteInProgress = true
+
+        do {
+            try await transport.send(Data(buffer: writeBuffer))
+            isWriteInProgress = false
+            let pending = waitingMessages
+            waitingMessages.removeAll()
+            for (message, continuation) in pending {
+                buffer.writeClientOp(message)
+                continuation.resume()
+            }
+        } catch {
+            isWriteInProgress = false
+            let pending = waitingMessages
+            waitingMessages.removeAll()
+            for (_, continuation) in pending {
+                continuation.resume(throwing: error)
+            }
+            buffer.clear()
+        }
+
+        // Check if there are any pending flushes
+        if buffer.readableBytes > 0 {
+            await flushWhenIdle()
+        }
     }
 }
