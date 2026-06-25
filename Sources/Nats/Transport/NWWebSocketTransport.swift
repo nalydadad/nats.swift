@@ -75,16 +75,19 @@
                             try await withCheckedThrowingContinuation {
                                 (cont: CheckedContinuation<Void, Error>) in
                                 self.connectContinuation.withLockedValue { $0 = cont }
-                                connection.start(queue: self.queue)
+                                // Read the connection from the box rather than
+                                // capturing the non-Sendable NWConnection here.
+                                self.connectionBox.withLockedValue { $0 }?.start(queue: self.queue)
                             }
                         } onCancel: {
                             // Cancelling the connection drives `.cancelled`,
                             // which resumes the continuation above.
-                            connection.cancel()
+                            self.connectionBox.withLockedValue { $0 }?.cancel()
                         }
                     }
                     group.addTask {
-                        try await Task.sleep(nanoseconds: UInt64(self.connectTimeout * 1_000_000_000))
+                        try await Task.sleep(
+                            nanoseconds: UInt64(self.connectTimeout * 1_000_000_000))
                         throw NatsError.ConnectError.timeout
                     }
                     // Wait for whichever finishes first, then cancel the rest.
