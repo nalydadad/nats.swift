@@ -27,15 +27,25 @@ jobs:
         uses: actions/checkout@v4
       - name: Install nats-server
         run: curl --fail https://binaries.nats.dev/nats-io/nats-server/v2@latest | PREFIX='/usr/local/bin' sh
-      - name: Start nats-server (websocket)
+      - name: Map a non-routable host (forces proxy use, not direct)
+        run: echo "192.0.2.1 nats-proxy-test" | sudo tee -a /etc/hosts
+      - name: Generate a throwaway TLS cert
+        run: |
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
+            -keyout /tmp/key.pem -out /tmp/cert.pem \
+            -subj "/CN=nats-proxy-test" -addext "subjectAltName=DNS:nats-proxy-test"
+      - name: Start nats-server (websocket + TLS)
         run: |
           cat > /tmp/nats-ws.conf <<'EOF'
           host: 127.0.0.1
           port: 4222
           websocket {
             host: 127.0.0.1
-            port: 8080
-            no_tls: true
+            port: 8443
+            tls {
+              cert_file: "/tmp/cert.pem"
+              key_file: "/tmp/key.pem"
+            }
           }
           EOF
           nats-server -c /tmp/nats-ws.conf > /tmp/nats.log 2>&1 &
@@ -45,10 +55,10 @@ jobs:
         run: |
           python3 Scripts/connect-proxy.py > /tmp/proxy.log 2>&1 &
           sleep 1
-      - name: Verify WebSocket connects through the proxy
+      - name: Verify WebSocket tunnels through the proxy and receives INFO
         run: swift Scripts/verify-ws-proxy.swift
-      - name: Assert traffic was tunnelled through the proxy
+      - name: Assert the connection went through the proxy
         run: |
           echo "--- proxy CONNECT log ---"
           cat /tmp/proxy.log
-          grep -q "127.0.0.1:8080" /tmp/proxy.log
+          grep -q "nats-proxy-test:8443" /tmp/proxy.log

@@ -46,9 +46,12 @@ def handle(client):
             return
         target = parts[1]
         print(target, flush=True)  # logged for the test assertion
-        host, _, port = target.rpartition(":")
+        # For the CI verification the requested host is a non-routable name so a
+        # direct (proxy-bypassing) connection cannot succeed; the tunnel is
+        # rewritten to the local server, keeping the requested port.
+        _, _, port = target.rpartition(":")
         try:
-            upstream = socket.create_connection((host, int(port)), timeout=10)
+            upstream = socket.create_connection(("127.0.0.1", int(port)), timeout=10)
         except OSError as exc:
             sys.stderr.write(f"upstream connect failed: {exc}\n")
             client.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
