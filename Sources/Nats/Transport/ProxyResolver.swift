@@ -123,7 +123,6 @@
                     // `PACContext` is recovered from `client` (the `info` pointer).
                     let callback: CFProxyAutoConfigurationResultCallback = {
                         client, proxyList, error in
-                        guard let client else { return }
                         let ctx = Unmanaged<PACContext>.fromOpaque(client).takeUnretainedValue()
                         if error == nil {
                             ctx.proxies = (proxyList as NSArray) as? [[String: Any]] ?? []
