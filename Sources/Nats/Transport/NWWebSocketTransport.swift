@@ -178,8 +178,9 @@
         @discardableResult
         private func resumeConnect(throwing error: Error?) -> Bool {
             let cont = connectContinuation.withLockedValue {
-                (stored: inout CheckedContinuation<Void, Error>?)
-                    -> CheckedContinuation<Void, Error>? in
+                (
+                    stored: inout CheckedContinuation<Void, Error>?
+                ) -> CheckedContinuation<Void, Error>? in
                 let toResume = stored
                 stored = nil
                 return toResume
