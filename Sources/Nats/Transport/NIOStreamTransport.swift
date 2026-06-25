@@ -36,7 +36,10 @@
             let onData: @Sendable (Data) -> Void
             let onClose: @Sendable (Error?) -> Void
 
-            init(onData: @escaping @Sendable (Data) -> Void, onClose: @escaping @Sendable (Error?) -> Void) {
+            init(
+                onData: @escaping @Sendable (Data) -> Void,
+                onClose: @escaping @Sendable (Error?) -> Void
+            ) {
                 self.onData = onData
                 self.onClose = onClose
             }
@@ -56,8 +59,9 @@
             }
         }
 
-        private let continuationBox = NIOLockedValueBox<AsyncThrowingStream<Data, Error>.Continuation?>(
-            nil)
+        private let continuationBox = NIOLockedValueBox<
+            AsyncThrowingStream<Data, Error>.Continuation?
+        >(nil)
         let incomingMessages: AsyncThrowingStream<Data, Error>
 
         private let channelBox = NIOLockedValueBox<Channel?>(nil)

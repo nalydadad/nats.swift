@@ -59,7 +59,11 @@
         func connect(url: URL, tls: TransportTLSOptions?) async throws {
             let parameters = try makeParameters(url: url, tls: tls)
             if let proxy = await ProxyResolver.resolve(for: url) {
-                parameters.proxyConfigurations = [proxy]
+                // Proxies are attached to an NWParameters via a PrivacyContext,
+                // not set on NWParameters directly.
+                let context = NWParameters.PrivacyContext(description: "io.nats.swift.proxy")
+                context.proxyConfigurations = [proxy]
+                parameters.setPrivacyContext(context)
             }
 
             let connection = NWConnection(to: .url(url), using: parameters)
@@ -84,7 +88,8 @@
                         }
                     }
                     group.addTask {
-                        try await Task.sleep(nanoseconds: UInt64(self.connectTimeout * 1_000_000_000))
+                        try await Task.sleep(
+                            nanoseconds: UInt64(self.connectTimeout * 1_000_000_000))
                         throw NatsError.ConnectError.timeout
                     }
                     // Wait for whichever finishes first, then cancel the rest.
@@ -121,8 +126,9 @@
             return parameters
         }
 
-        private func configureTLS(_ options: NWProtocolTLS.Options, tls: TransportTLSOptions?) throws
-        {
+        private func configureTLS(
+            _ options: NWProtocolTLS.Options, tls: TransportTLSOptions?
+        ) throws {
             #if canImport(Security)
                 let secOptions = options.securityProtocolOptions
 

@@ -143,7 +143,9 @@
             guard let (versionLength, afterVersionLength) = readLength(der, from: index) else {
                 return nil
             }
-            guard let afterVersion = der.index(afterVersionLength, offsetBy: versionLength, limitedBy: der.endIndex)
+            guard
+                let afterVersion = der.index(
+                    afterVersionLength, offsetBy: versionLength, limitedBy: der.endIndex)
             else { return nil }
             index = afterVersion
 
@@ -166,12 +168,15 @@
                 return nil
             }
             guard
-                let end = der.index(afterOctetLength, offsetBy: octetLength, limitedBy: der.endIndex)
+                let end = der.index(
+                    afterOctetLength, offsetBy: octetLength, limitedBy: der.endIndex)
             else { return nil }
             return der[afterOctetLength..<end]
         }
 
-        private static func readLength(_ der: Data, from index: Data.Index) -> (
+        private static func readLength(
+            _ der: Data, from index: Data.Index
+        ) -> (
             length: Int, next: Data.Index
         )? {
             guard index < der.endIndex else { return nil }
@@ -204,7 +209,8 @@
             } else {
                 self.rootCertificate = nil
             }
-            if let clientCertificateURL = tls?.clientCertificate, let clientKeyURL = tls?.clientKey {
+            if let clientCertificateURL = tls?.clientCertificate, let clientKeyURL = tls?.clientKey
+            {
                 self.identity = try TLSIdentity.loadIdentity(
                     certificate: clientCertificateURL, key: clientKeyURL)
             } else {
@@ -215,8 +221,9 @@
         func urlSession(
             _ session: URLSession,
             didReceive challenge: URLAuthenticationChallenge,
-            completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) ->
-                Void
+            completionHandler: @escaping (
+                URLSession.AuthChallengeDisposition, URLCredential?
+            ) -> Void
         ) {
             switch challenge.protectionSpace.authenticationMethod {
             case NSURLAuthenticationMethodServerTrust:

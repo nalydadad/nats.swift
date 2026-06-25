@@ -122,7 +122,7 @@ func run() async -> Int32 {
             "scheme is WebSocket -> NWWebSocketTransport (macOS 14+/iOS 17+, proxy-aware) "
                 + "or URLSessionWebSocketTransport (older / non-Darwin)")
     } else {
-        log("scheme is raw NATS -> URLSessionStreamTransport (Darwin) or NIOStreamTransport (Linux)")
+        log("scheme is raw NATS -> URLSessionStreamTransport (Darwin) / NIOStreamTransport (Linux)")
     }
     if let proxy = ProcessInfo.processInfo.environment["https_proxy"]
         ?? ProcessInfo.processInfo.environment["HTTPS_PROXY"]
