@@ -1,0 +1,21 @@
+name: build-check
+
+# Compile-only check on macOS so the Darwin-only transport
+# (NWWebSocketTransport / ProxyResolver, gated on canImport(Network)) is
+# actually type-checked. Triggered on pushes to development branches and
+# on demand.
+on:
+  push:
+    branches: [ "claude/**" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Build
+        run: swift build
