@@ -18,10 +18,15 @@ import NIOConcurrencyHelpers
     import FoundationNetworking
 #endif
 
-/// `ws://`/`wss://` transport backed by `URLSessionWebSocketTask`, which
-/// (unlike NIO's WebSocket client) inherits the system/PAC proxy
-/// configuration and certificate trust store. Always sends and expects
-/// binary frames; the NATS protocol is carried as raw bytes inside them.
+#if canImport(Network)
+    import Network
+#endif
+
+/// `ws://`/`wss://` transport backed by `URLSessionWebSocketTask`. On iOS 17 /
+/// macOS 14+ it routes through an explicit `ProxyConfiguration` resolved from
+/// the system proxy/PAC (see `connect`), which fixes WebSocket tunnelling
+/// through corporate HTTP proxies. Always sends and expects binary frames; the
+/// NATS protocol is carried as raw bytes inside them.
 internal final class URLSessionWebSocketTransport: NSObject, NatsTransport, @unchecked Sendable {
     private let continuationBox = NIOLockedValueBox<AsyncThrowingStream<Data, Error>.Continuation?>(
         nil)
@@ -40,12 +45,26 @@ internal final class URLSessionWebSocketTransport: NSObject, NatsTransport, @unc
 
     func connect(url: URL, tls: TransportTLSOptions?) async throws {
         let configuration = URLSessionConfiguration.default
+        #if canImport(Network)
+            // URLSessionWebSocketTask fails to tunnel through the legacy
+            // system-proxy/PAC path (the 101 upgrade succeeds but the upgraded
+            // stream is dropped with -1005). Resolving the system proxy/PAC into
+            // an explicit `ProxyConfiguration` (iOS 17+) routes the connection
+            // through Network.framework's modern relay stack, which handles
+            // WebSocket-over-proxy correctly.
+            if #available(iOS 17.0, macOS 14.0, tvOS 17.0, watchOS 10.0, *) {
+                if let proxy = await ProxyResolver.resolve(for: url) {
+                    configuration.proxyConfigurations = [proxy]
+                }
+            }
+        #endif
         #if canImport(Security)
             let delegate: TLSChallengeDelegate? = try TLSChallengeDelegate(tls: tls)
         #else
             let delegate: URLSessionDelegate? = nil
         #endif
-        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        let session = URLSession(
+            configuration: configuration, delegate: delegate, delegateQueue: nil)
         let task = session.webSocketTask(with: url)
         sessionBox.withLockedValue { $0 = session }
         taskBox.withLockedValue { $0 = task }

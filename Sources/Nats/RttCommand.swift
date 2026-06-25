@@ -35,7 +35,8 @@ internal final class RttCommand: Sendable {
         let nanoTime = now.uptimeNanoseconds - startTime.uptimeNanoseconds
         let rtt = TimeInterval(nanoTime) / 1_000_000_000  // Convert nanos to seconds
 
-        let continuation = state.withLockedValue { current -> CheckedContinuation<TimeInterval, Never>? in
+        let continuation = state.withLockedValue {
+            current -> CheckedContinuation<TimeInterval, Never>? in
             if case .waiting(let continuation) = current {
                 current = .ready(rtt)
                 return continuation
@@ -47,7 +48,8 @@ internal final class RttCommand: Sendable {
     }
 
     func getRoundTripTime() async throws -> TimeInterval {
-        return await withCheckedContinuation { (continuation: CheckedContinuation<TimeInterval, Never>) in
+        return await withCheckedContinuation {
+            (continuation: CheckedContinuation<TimeInterval, Never>) in
             let immediateResult = state.withLockedValue { current -> TimeInterval? in
                 if case .ready(let rtt) = current {
                     return rtt

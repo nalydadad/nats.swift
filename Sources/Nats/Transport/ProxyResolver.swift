@@ -16,7 +16,7 @@
 // `NWConnection` does *not* consult the system proxy automatically, so we
 // resolve the system configuration (including PAC / proxy-auto-config) for a
 // given URL ourselves and hand it back as an explicit `ProxyConfiguration`.
-#if canImport(Network) && canImport(CFNetwork)
+#if canImport(Network)
 
     import CFNetwork
     import Foundation
@@ -32,7 +32,7 @@
                 return nil
             }
             let proxies =
-                CFNetworkCopyProxiesForURL(url as CFURL, cfSettings).takeRetainedValue()
+                (CFNetworkCopyProxiesForURL(url as CFURL, cfSettings).takeRetainedValue() as NSArray)
                 as? [[String: Any]] ?? []
             return await firstSupportedProxy(from: proxies, targetURL: url)
         }
@@ -41,23 +41,21 @@
             from proxies: [[String: Any]], targetURL: URL
         ) async -> ProxyConfiguration? {
             for proxy in proxies {
-                guard let rawType = proxy[kCFProxyTypeKey as String] else { continue }
-                let type = rawType as CFString
+                guard let type = proxy[kCFProxyTypeKey as String] as? String else { continue }
 
-                if type == kCFProxyTypeNone {
+                if type == kCFProxyTypeNone as String {
                     // Explicit "go direct" entry — honour it and stop looking.
                     return nil
                 }
 
-                if type == kCFProxyTypeHTTPS || type == kCFProxyTypeHTTP {
+                if type == kCFProxyTypeHTTPS as String || type == kCFProxyTypeHTTP as String {
                     if let config = makeConfiguration(from: proxy) {
                         return config
                     }
                 }
 
-                if type == kCFProxyTypeAutoConfigurationURL {
-                    guard let pacURL = proxy[kCFProxyAutoConfigurationURLKey as String] as? URL
-                    else { continue }
+                if type == kCFProxyTypeAutoConfigurationURL as String {
+                    guard let pacURL = pacURL(from: proxy) else { continue }
                     let resolved = await executePAC(pacURL: pacURL, targetURL: targetURL)
                     if let config = await firstSupportedProxy(
                         from: resolved, targetURL: targetURL)
@@ -72,6 +70,13 @@
             return nil
         }
 
+        private static func pacURL(from proxy: [String: Any]) -> URL? {
+            let value = proxy[kCFProxyAutoConfigurationURLKey as String]
+            if let url = value as? URL { return url }
+            if let string = value as? String { return URL(string: string) }
+            return nil
+        }
+
         private static func makeConfiguration(from proxy: [String: Any]) -> ProxyConfiguration? {
             guard
                 let host = proxy[kCFProxyHostNameKey as String] as? String,
@@ -80,7 +85,7 @@
             else { return nil }
 
             let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: port)
-            var config = ProxyConfiguration(httpCONNECTProxy: endpoint)
+            let config = ProxyConfiguration(httpCONNECTProxy: endpoint)
             if let username = proxy[kCFProxyUsernameKey as String] as? String,
                 let password = proxy[kCFProxyPasswordKey as String] as? String
             {
@@ -89,10 +94,15 @@
             return config
         }
 
-        /// Result holder so the C result callback can deliver the resolved
-        /// proxy list back out of the run-loop source.
-        private final class PACResult {
+        /// Carries the resolved proxy list and the awaiting continuation across
+        /// the dedicated run-loop thread. `@unchecked Sendable` because access is
+        /// confined to that single thread (the C callback runs on its run loop).
+        private final class PACContext: @unchecked Sendable {
             var proxies: [[String: Any]]?
+            let continuation: CheckedContinuation<[[String: Any]], Never>
+            init(_ continuation: CheckedContinuation<[[String: Any]], Never>) {
+                self.continuation = continuation
+            }
         }
 
         /// Evaluates a PAC file for `targetURL`. `CFNetworkExecuteProxyAuto-
@@ -102,43 +112,40 @@
         private static func executePAC(pacURL: URL, targetURL: URL) async -> [[String: Any]] {
             await withCheckedContinuation {
                 (continuation: CheckedContinuation<[[String: Any]], Never>) in
+                let pacContext = PACContext(continuation)
                 let thread = Thread {
-                    let result = PACResult()
-                    var context = CFStreamClientContext(
+                    var streamContext = CFStreamClientContext(
                         version: 0,
-                        info: Unmanaged.passUnretained(result).toOpaque(),
+                        info: Unmanaged.passUnretained(pacContext).toOpaque(),
                         retain: nil, release: nil, copyDescription: nil)
 
-                    // Must be non-capturing so it converts to a C function
-                    // pointer; the `PACResult` is recovered from `client`
-                    // (the `info` pointer set in `context`).
+                    // Non-capturing so it converts to a C function pointer; the
+                    // `PACContext` is recovered from `client` (the `info` pointer).
                     let callback: CFProxyAutoConfigurationResultCallback = {
-                        (client, proxyList, error) in
-                        guard let client else { return }
-                        let holder = Unmanaged<PACResult>.fromOpaque(client)
-                            .takeUnretainedValue()
+                        client, proxyList, error in
+                        let ctx = Unmanaged<PACContext>.fromOpaque(client).takeUnretainedValue()
                         if error == nil {
-                            holder.proxies = (proxyList as? [[String: Any]]) ?? []
+                            ctx.proxies = (proxyList as NSArray) as? [[String: Any]] ?? []
                         } else {
-                            holder.proxies = []
+                            ctx.proxies = []
                         }
                         CFRunLoopStop(CFRunLoopGetCurrent())
                     }
 
                     let source = CFNetworkExecuteProxyAutoConfigurationURL(
-                        pacURL as CFURL, targetURL as CFURL, callback, &context
-                    ).takeRetainedValue()
+                        pacURL as CFURL, targetURL as CFURL, callback, &streamContext
+                    )
 
                     let mode = CFRunLoopMode.defaultMode
                     CFRunLoopAddSource(CFRunLoopGetCurrent(), source, mode)
                     // Bound the wait so a stuck PAC fetch can't hang connect().
                     let deadline = Date().addingTimeInterval(10)
-                    while result.proxies == nil && Date() < deadline {
+                    while pacContext.proxies == nil && Date() < deadline {
                         CFRunLoopRunInMode(mode, 0.25, true)
                     }
                     CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, mode)
 
-                    continuation.resume(returning: result.proxies ?? [])
+                    pacContext.continuation.resume(returning: pacContext.proxies ?? [])
                 }
                 thread.start()
             }

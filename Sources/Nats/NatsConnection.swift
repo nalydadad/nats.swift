@@ -15,15 +15,14 @@ import Atomics
 import Dispatch
 import Foundation
 import NIO
+import NIOConcurrencyHelpers
+import NIOFoundationCompat
+import NKeys
 
 #if canImport(FoundationNetworking)
     import FoundationNetworking
     import NIOSSL
 #endif
-
-import NIOConcurrencyHelpers
-import NIOFoundationCompat
-import NKeys
 
 final class ConnectionHandler: Sendable {
     let lang = "Swift"
@@ -504,18 +503,7 @@ final class ConnectionHandler: Sendable {
 
                         let newTransport: any NatsTransport
                         if s.scheme == "ws" || s.scheme == "wss" {
-                            #if canImport(Network)
-                                if #available(iOS 17.0, macOS 14.0, tvOS 17.0, watchOS 10.0, *) {
-                                    // Network.framework tunnels WebSockets through
-                                    // HTTP/PAC proxies correctly, unlike
-                                    // URLSessionWebSocketTask. See NWWebSocketTransport.
-                                    newTransport = NWWebSocketTransport()
-                                } else {
-                                    newTransport = URLSessionWebSocketTransport()
-                                }
-                            #else
-                                newTransport = URLSessionWebSocketTransport()
-                            #endif
+                            newTransport = URLSessionWebSocketTransport()
                         } else {
                             #if canImport(FoundationNetworking)
                                 newTransport = NIOStreamTransport()
