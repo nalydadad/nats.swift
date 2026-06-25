@@ -19,6 +19,10 @@ import NIOConcurrencyHelpers
 import NIOFoundationCompat
 import NKeys
 
+#if canImport(Network)
+    import Network
+#endif
+
 #if canImport(FoundationNetworking)
     import FoundationNetworking
     import NIOSSL
@@ -447,6 +451,21 @@ final class ConnectionHandler: Sendable {
                     }
                     throw NatsError.ConnectError.io(error)
                 }
+            #if canImport(Network)
+                // The Apple WebSocket transport (`NWWebSocketTransport`)
+                // surfaces `NWError`, not `URLError`. Map connection-level
+                // failures to `.io`/`.dns`/`.timeout` so they aren't mislabelled
+                // as `tlsFailure` on a wss:// / requireTls connection.
+                case let error as NWError:
+                    switch error {
+                    case .posix(.ETIMEDOUT):
+                        throw NatsError.ConnectError.timeout
+                    case .dns:
+                        throw NatsError.ConnectError.dns(error)
+                    default:
+                        throw NatsError.ConnectError.io(error)
+                    }
+            #endif
             #if canImport(FoundationNetworking)
                 // Linux fallback (`NIOStreamTransport`) surfaces NIO's own
                 // connection/TLS error types instead of `URLError`.
@@ -503,7 +522,11 @@ final class ConnectionHandler: Sendable {
 
                         let newTransport: any NatsTransport
                         if s.scheme == "ws" || s.scheme == "wss" {
-                            newTransport = URLSessionWebSocketTransport()
+                            #if canImport(Network)
+                                newTransport = NWWebSocketTransport()
+                            #else
+                                newTransport = URLSessionWebSocketTransport()
+                            #endif
                         } else {
                             #if canImport(FoundationNetworking)
                                 newTransport = NIOStreamTransport()

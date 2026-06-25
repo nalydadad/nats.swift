@@ -18,14 +18,9 @@ import NIOConcurrencyHelpers
     import FoundationNetworking
 #endif
 
-#if canImport(Network)
-    import Network
-#endif
-
-/// `ws://`/`wss://` transport backed by `URLSessionWebSocketTask`. On iOS 17 /
-/// macOS 14+ it routes through an explicit `ProxyConfiguration` resolved from
-/// the system proxy/PAC (see `connect`), which fixes WebSocket tunnelling
-/// through corporate HTTP proxies. Always sends and expects binary frames; the
+/// `ws://`/`wss://` transport backed by `URLSessionWebSocketTask`. Used on
+/// platforms without Network.framework (e.g. Linux); Apple platforms use
+/// `NWWebSocketTransport` instead. Always sends and expects binary frames; the
 /// NATS protocol is carried as raw bytes inside them.
 internal final class URLSessionWebSocketTransport: NSObject, NatsTransport, @unchecked Sendable {
     private let continuationBox = NIOLockedValueBox<AsyncThrowingStream<Data, Error>.Continuation?>(
@@ -45,19 +40,6 @@ internal final class URLSessionWebSocketTransport: NSObject, NatsTransport, @unc
 
     func connect(url: URL, tls: TransportTLSOptions?) async throws {
         let configuration = URLSessionConfiguration.default
-        #if canImport(Network)
-            // URLSessionWebSocketTask fails to tunnel through the legacy
-            // system-proxy/PAC path (the 101 upgrade succeeds but the upgraded
-            // stream is dropped with -1005). Resolving the system proxy/PAC into
-            // an explicit `ProxyConfiguration` (iOS 17+) routes the connection
-            // through Network.framework's modern relay stack, which handles
-            // WebSocket-over-proxy correctly.
-            if #available(iOS 17.0, macOS 14.0, tvOS 17.0, watchOS 10.0, *) {
-                if let proxy = await ProxyResolver.resolve(for: url) {
-                    configuration.proxyConfigurations = [proxy]
-                }
-            }
-        #endif
         #if canImport(Security)
             let delegate: TLSChallengeDelegate? = try TLSChallengeDelegate(tls: tls)
         #else
