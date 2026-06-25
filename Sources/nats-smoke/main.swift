@@ -85,10 +85,10 @@ func diagnose(_ error: Error) {
     }
     if ns.code == -1005 {
         note(
-            "↳ -1005 is NSURLErrorNetworkConnectionLost: the socket was dropped after it opened. "
-                + "Behind a corporate proxy this is the WebSocket-upgrade-lost failure; confirm the "
-                + "system proxy/PAC is reachable and that wss:// (not ws://) is used through TLS-terminating "
-                + "proxies.")
+            "↳ -1005 is NSURLErrorNetworkConnectionLost: the socket was dropped after it "
+                + "opened. Behind a corporate proxy this is the WebSocket-upgrade-lost "
+                + "failure; confirm the system proxy/PAC is reachable and that wss:// (not "
+                + "ws://) is used through TLS-terminating proxies.")
     }
 }
 
@@ -199,7 +199,9 @@ func parseArgs() -> Options {
             guard let n = Int(value(for: arg)), n > 0 else { fail("--count must be > 0") }
             opts.count = n
         case "--timeout":
-            guard let t = TimeInterval(value(for: arg)), t > 0 else { fail("--timeout must be > 0") }
+            guard let t = TimeInterval(value(for: arg)), t > 0 else {
+                fail("--timeout must be > 0")
+            }
             opts.timeout = t
         case "--verbose": opts.verbose = true
         case "-h", "--help":
@@ -329,7 +331,9 @@ do {
     try await client.close()
     note("closed ✔")
 
-    print("\n✅ PASS: real NATS connection established and credential-carrying round-trip verified.")
+    print(
+        "\n✅ PASS: real NATS connection established and "
+            + "credential-carrying round-trip verified.")
     exit(0)
 } catch {
     note("connection/round-trip failed")
