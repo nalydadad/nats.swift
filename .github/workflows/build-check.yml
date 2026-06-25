@@ -1,9 +1,10 @@
 name: build-check
 
-# macOS checks for the Darwin-only proxy/WebSocket code (gated on
-# canImport(Network)): a compile check plus a runtime verification that a
-# WebSocket tunnels through an explicit ProxyConfiguration. Triggered on pushes
-# to development branches and on demand.
+# macOS checks for the Darwin-only WebSocket code (gated on
+# canImport(Network)): a compile check plus a runtime verification that an
+# NWConnection WebSocket connects directly (no proxy) and receives the server
+# INFO after the 101 upgrade. Triggered on pushes to development branches and
+# on demand.
 on:
   push:
     branches: [ "claude/**" ]
@@ -20,20 +21,18 @@ jobs:
       - name: Build
         run: swift build
 
-  ws-proxy-verify:
+  ws-nwtransport-verify:
     runs-on: macos-15
     steps:
       - name: Checkout the code
         uses: actions/checkout@v4
       - name: Install nats-server
         run: curl --fail https://binaries.nats.dev/nats-io/nats-server/v2@latest | PREFIX='/usr/local/bin' sh
-      - name: Map a non-routable host (forces proxy use, not direct)
-        run: echo "192.0.2.1 nats-proxy-test" | sudo tee -a /etc/hosts
       - name: Generate a throwaway TLS cert
         run: |
           openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
             -keyout /tmp/key.pem -out /tmp/cert.pem \
-            -subj "/CN=nats-proxy-test" -addext "subjectAltName=DNS:nats-proxy-test"
+            -subj "/CN=127.0.0.1" -addext "subjectAltName=IP:127.0.0.1"
       - name: Start nats-server (websocket + TLS)
         run: |
           cat > /tmp/nats-ws.conf <<'EOF'
@@ -51,14 +50,5 @@ jobs:
           nats-server -c /tmp/nats-ws.conf > /tmp/nats.log 2>&1 &
           sleep 2
           cat /tmp/nats.log
-      - name: Start CONNECT proxy
-        run: |
-          python3 Scripts/connect-proxy.py > /tmp/proxy.log 2>&1 &
-          sleep 1
-      - name: Verify WebSocket tunnels through the proxy and receives INFO
-        run: swift Scripts/verify-ws-proxy.swift
-      - name: Assert the connection went through the proxy
-        run: |
-          echo "--- proxy CONNECT log ---"
-          cat /tmp/proxy.log
-          grep -q "nats-proxy-test:8443" /tmp/proxy.log
+      - name: Verify the NWConnection WebSocket connects directly and receives INFO
+        run: swift Scripts/verify-ws-nwtransport.swift
