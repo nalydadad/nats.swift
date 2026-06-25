@@ -14,6 +14,10 @@
 import Foundation
 import XCTest
 
+#if canImport(FoundationNetworking)
+    import FoundationNetworking
+#endif
+
 @testable import Nats
 
 class JwtTests: XCTestCase {

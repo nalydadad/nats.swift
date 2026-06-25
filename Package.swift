@@ -2,6 +2,33 @@
 
 import PackageDescription
 
+// JetStream currently depends on Apple-only frameworks (CryptoKit, Combine), so
+// it is only built on Apple platforms. On other platforms (e.g. Linux CI) the
+// Nats core module — the focus of this client — still builds and tests.
+#if canImport(Darwin)
+    let jetStreamProducts: [Product] = [
+        .library(name: "JetStream", targets: ["JetStream"])
+    ]
+    let jetStreamTargets: [Target] = [
+        .target(
+            name: "JetStream",
+            dependencies: [
+                "Nats",
+                .product(name: "Logging", package: "swift-log"),
+            ]),
+        .testTarget(
+            name: "JetStreamTests",
+            dependencies: ["Nats", "JetStream", "NatsServer"],
+            resources: [
+                .process("Integration/Resources")
+            ]
+        ),
+    ]
+#else
+    let jetStreamProducts: [Product] = []
+    let jetStreamTargets: [Target] = []
+#endif
+
 let package = Package(
     name: "nats-swift",
     platforms: [
@@ -10,9 +37,8 @@ let package = Package(
     ],
     products: [
         .library(name: "Nats", targets: ["Nats"]),
-        .library(name: "JetStream", targets: ["JetStream"]),
         .library(name: "NatsServer", targets: ["NatsServer"])
-    ],
+    ] + jetStreamProducts,
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.68.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.4.2"),
@@ -28,16 +54,8 @@ let package = Package(
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
-                .product(name: "NIOHTTP1", package: "swift-nio"),
-                .product(name: "NIOWebSocket", package: "swift-nio"),
                 .product(name: "NKeys", package: "nkeys.swift"),
                 .product(name: "Nuid", package: "swift-nuid"),
-            ]),
-        .target(
-            name: "JetStream",
-            dependencies: [
-                "Nats",
-                .product(name: "Logging", package: "swift-log"),
             ]),
         .target(
             name: "NatsServer",
@@ -52,17 +70,10 @@ let package = Package(
                 .process("Integration/Resources")
                 ]
         ),
-        .testTarget(
-                name: "JetStreamTests",
-                dependencies: ["Nats", "JetStream", "NatsServer"],
-                resources: [
-                .process("Integration/Resources")
-                ]
-        ),
         .executableTarget(name: "bench", dependencies: ["Nats"]),
         .executableTarget(name: "Benchmark", dependencies: ["Nats"]),
         .executableTarget(name: "BenchmarkPubSub", dependencies: ["Nats"]),
         .executableTarget(name: "BenchmarkSub", dependencies: ["Nats"]),
         .executableTarget(name: "Example", dependencies: ["Nats"]),
-    ]
+    ] + jetStreamTargets
 )

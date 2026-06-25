@@ -301,7 +301,8 @@ extension NatsClient {
         if case .closed = connectionHandler.currentState {
             throw NatsError.ClientError.connectionClosed
         }
-        connectionHandler.channel?.flush()
+        // Writes are flushed as part of every `BatchBuffer.writeMessage`
+        // call already; nothing additional is buffered here to flush.
     }
 
     /// Subscribes to a subject to receive messages.
@@ -342,7 +343,7 @@ extension NatsClient {
         if case .closed = connectionHandler.currentState {
             throw NatsError.ClientError.connectionClosed
         }
-        let ping = RttCommand.makeFrom(channel: connectionHandler.channel)
+        let ping = RttCommand.makeFrom()
         await connectionHandler.sendPing(ping)
         return try await ping.getRoundTripTime()
     }
