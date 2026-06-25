@@ -82,7 +82,8 @@
                         }
                     }
                     group.addTask {
-                        try await Task.sleep(nanoseconds: UInt64(self.connectTimeout * 1_000_000_000))
+                        try await Task.sleep(
+                            nanoseconds: UInt64(self.connectTimeout * 1_000_000_000))
                         throw NatsError.ConnectError.timeout
                     }
                     // Wait for whichever finishes first, then cancel the rest.
@@ -119,8 +120,9 @@
             return parameters
         }
 
-        private func configureTLS(_ options: NWProtocolTLS.Options, tls: TransportTLSOptions?) throws
-        {
+        private func configureTLS(
+            _ options: NWProtocolTLS.Options, tls: TransportTLSOptions?
+        ) throws {
             #if canImport(Security)
                 let secOptions = options.securityProtocolOptions
 
@@ -169,11 +171,9 @@
 
         @discardableResult
         private func resumeConnect(throwing error: Error?) -> Bool {
-            let cont = connectContinuation.withLockedValue {
-                (stored: inout CheckedContinuation<Void, Error>?)
-                    -> CheckedContinuation<Void, Error>? in
-                let toResume = stored
-                stored = nil
+            let cont: CheckedContinuation<Void, Error>? = connectContinuation.withLockedValue {
+                let toResume = $0
+                $0 = nil
                 return toResume
             }
             guard let cont else { return false }
