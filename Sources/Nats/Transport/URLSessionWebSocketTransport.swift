@@ -76,6 +76,11 @@ internal final class URLSessionWebSocketTransport: NSObject, NatsTransport, @unc
                         break
                     }
                 } catch {
+                    let nsError = error as NSError
+                    let reason = task.closeReason.flatMap { String(data: $0, encoding: .utf8) }
+                    logger.error(
+                        "websocket receive failed: \(error) [domain=\(nsError.domain) code=\(nsError.code)] closeCode=\(task.closeCode.rawValue) reason=\(reason ?? "<none>")"
+                    )
                     self.finish(throwing: error)
                     return
                 }
