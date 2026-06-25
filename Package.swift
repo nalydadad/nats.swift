@@ -75,5 +75,11 @@ let package = Package(
         .executableTarget(name: "BenchmarkPubSub", dependencies: ["Nats"]),
         .executableTarget(name: "BenchmarkSub", dependencies: ["Nats"]),
         .executableTarget(name: "Example", dependencies: ["Nats"]),
+        .executableTarget(
+            name: "nats-smoke",
+            dependencies: [
+                "Nats",
+                .product(name: "Logging", package: "swift-log"),
+            ]),
     ] + jetStreamTargets
 )

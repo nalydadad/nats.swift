@@ -568,6 +568,25 @@ final class ConnectionHandler: Sendable {
         self.connectedUrl = s
     }
 
+    /// Reads a local credential/nkey file into memory.
+    ///
+    /// Credential and nkey files are always on the local filesystem, so this
+    /// uses a direct file read rather than `URLSession`. `URLSession`'s file
+    /// loading is unsupported on swift-corelibs-foundation (Linux), and on
+    /// Darwin it needlessly routes a *local file* read through the networking
+    /// stack (proxy/PAC resolution included) — exactly the layer that has been
+    /// the source of the WebSocket `-1005` proxy failures. A plain
+    /// `Data(contentsOf:)` keeps credential loading deterministic and identical
+    /// on every platform.
+    static func readLocalFile(at url: URL) throws -> Data {
+        do {
+            return try Data(contentsOf: url)
+        } catch {
+            throw NatsError.ConnectError.invalidConfig(
+                "failed to read credentials file at \(url.path): \(error.localizedDescription)")
+        }
+    }
+
     private func sendClientConnectInit() async throws {
         var initialConnect = ConnectInfo(
             verbose: false, pedantic: false, userJwt: nil, nkey: "", name: "", echo: true,
@@ -579,7 +598,7 @@ final class ConnectionHandler: Sendable {
             throw NatsError.ConnectError.invalidConfig("cannot use both nkey and nkeyPath")
         }
         if let auth = self.auth, let credentialsPath = auth.credentialsPath {
-            let credentials = try await URLSession.shared.data(from: credentialsPath).0
+            let credentials = try ConnectionHandler.readLocalFile(at: credentialsPath)
             guard let jwt = JwtUtils.parseDecoratedJWT(contents: credentials) else {
                 throw NatsError.ConnectError.invalidConfig(
                     "failed to extract JWT from credentials file")
@@ -599,7 +618,7 @@ final class ConnectionHandler: Sendable {
             initialConnect.userJwt = String(data: jwt, encoding: .utf8)!
         }
         if let nkey = self.auth?.nkeyPath {
-            let nkeyData = try await URLSession.shared.data(from: nkey).0
+            let nkeyData = try ConnectionHandler.readLocalFile(at: nkey)
 
             guard let nkeyContent = String(data: nkeyData, encoding: .utf8) else {
                 throw NatsError.ConnectError.invalidConfig("failed to read NKEY file")
