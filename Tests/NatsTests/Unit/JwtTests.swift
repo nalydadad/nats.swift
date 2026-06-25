@@ -31,7 +31,10 @@ class JwtTests: XCTestCase {
         let currentFile = URL(fileURLWithPath: #file)
         let testDir = currentFile.deletingLastPathComponent().deletingLastPathComponent()
         let resourceURL = testDir.appendingPathComponent("Integration/Resources/TestUser.creds")
-        let credsData = try await URLSession.shared.data(from: resourceURL).0
+        // Read the local creds file directly. `URLSession`'s file:// loading is
+        // unsupported on Linux Foundation, which previously made this test fail
+        // in CI; `Data(contentsOf:)` is portable and is what the client now uses.
+        let credsData = try Data(contentsOf: resourceURL)
 
         let nkey = String(data: JwtUtils.parseDecoratedNKey(contents: credsData)!, encoding: .utf8)
         let expectedNkey = "SUACH75SWCM5D2JMJM6EKLR2WDARVGZT4QC6LX3AGHSWOMVAKERABBBRWM"
