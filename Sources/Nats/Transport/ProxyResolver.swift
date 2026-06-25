@@ -85,7 +85,7 @@
             else { return nil }
 
             let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: port)
-            var config = ProxyConfiguration(httpCONNECTProxy: endpoint)
+            let config = ProxyConfiguration(httpCONNECTProxy: endpoint)
             if let username = proxy[kCFProxyUsernameKey as String] as? String,
                 let password = proxy[kCFProxyPasswordKey as String] as? String
             {
@@ -135,7 +135,7 @@
 
                     let source = CFNetworkExecuteProxyAutoConfigurationURL(
                         pacURL as CFURL, targetURL as CFURL, callback, &streamContext
-                    ).takeRetainedValue()
+                    )
 
                     let mode = CFRunLoopMode.defaultMode
                     CFRunLoopAddSource(CFRunLoopGetCurrent(), source, mode)
