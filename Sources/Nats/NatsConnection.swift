@@ -435,6 +435,11 @@ final class ConnectionHandler: Sendable {
                     throw NatsError.ConnectError.timeout
                 case .cannotFindHost, .dnsLookupFailed:
                     throw NatsError.ConnectError.dns(error)
+                case .networkConnectionLost, .cannotConnectToHost, .notConnectedToInternet:
+                    // The connection itself failed (e.g. the peer/proxy dropped
+                    // the socket); this is not a TLS handshake failure even on a
+                    // wss:// / requireTls connection, so don't mislabel it.
+                    throw NatsError.ConnectError.io(error)
                 default:
                     if self.requireTls || self.tlsFirst || self.rootCertificate != nil
                         || self.clientCertificate != nil
@@ -499,7 +504,18 @@ final class ConnectionHandler: Sendable {
 
                         let newTransport: any NatsTransport
                         if s.scheme == "ws" || s.scheme == "wss" {
-                            newTransport = URLSessionWebSocketTransport()
+                            #if canImport(Network)
+                                if #available(iOS 17.0, macOS 14.0, tvOS 17.0, watchOS 10.0, *) {
+                                    // Network.framework tunnels WebSockets through
+                                    // HTTP/PAC proxies correctly, unlike
+                                    // URLSessionWebSocketTask. See NWWebSocketTransport.
+                                    newTransport = NWWebSocketTransport()
+                                } else {
+                                    newTransport = URLSessionWebSocketTransport()
+                                }
+                            #else
+                                newTransport = URLSessionWebSocketTransport()
+                            #endif
                         } else {
                             #if canImport(FoundationNetworking)
                                 newTransport = NIOStreamTransport()
