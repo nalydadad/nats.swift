@@ -63,7 +63,8 @@ internal final class URLSessionWebSocketTransport: NSObject, NatsTransport, @unc
         #else
             let delegate: URLSessionDelegate? = nil
         #endif
-        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        let session = URLSession(
+            configuration: configuration, delegate: delegate, delegateQueue: nil)
         let task = session.webSocketTask(with: url)
         sessionBox.withLockedValue { $0 = session }
         taskBox.withLockedValue { $0 = task }

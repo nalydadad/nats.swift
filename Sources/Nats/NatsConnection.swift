@@ -15,15 +15,14 @@ import Atomics
 import Dispatch
 import Foundation
 import NIO
+import NIOConcurrencyHelpers
+import NIOFoundationCompat
+import NKeys
 
 #if canImport(FoundationNetworking)
     import FoundationNetworking
     import NIOSSL
 #endif
-
-import NIOConcurrencyHelpers
-import NIOFoundationCompat
-import NKeys
 
 final class ConnectionHandler: Sendable {
     let lang = "Swift"
