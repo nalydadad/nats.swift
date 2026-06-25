@@ -221,8 +221,9 @@
         func urlSession(
             _ session: URLSession,
             didReceive challenge: URLAuthenticationChallenge,
-            completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) ->
-                Void
+            completionHandler: @escaping (
+                URLSession.AuthChallengeDisposition, URLCredential?
+            ) -> Void
         ) {
             switch challenge.protectionSpace.authenticationMethod {
             case NSURLAuthenticationMethodServerTrust:
