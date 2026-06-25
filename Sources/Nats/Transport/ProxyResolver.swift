@@ -41,8 +41,7 @@
             from proxies: [[String: Any]], targetURL: URL
         ) async -> ProxyConfiguration? {
             for proxy in proxies {
-                guard let rawType = proxy[kCFProxyTypeKey as String] else { continue }
-                let type = rawType as CFString
+                guard let type = proxy[kCFProxyTypeKey as String] as? CFString else { continue }
 
                 if type == kCFProxyTypeNone {
                     // Explicit "go direct" entry — honour it and stop looking.
@@ -80,7 +79,7 @@
             else { return nil }
 
             let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: port)
-            var config = ProxyConfiguration(httpCONNECTProxy: endpoint)
+            let config = ProxyConfiguration(httpCONNECTProxy: endpoint)
             if let username = proxy[kCFProxyUsernameKey as String] as? String,
                 let password = proxy[kCFProxyPasswordKey as String] as? String
             {
@@ -127,7 +126,7 @@
 
                     let source = CFNetworkExecuteProxyAutoConfigurationURL(
                         pacURL as CFURL, targetURL as CFURL, callback, &context
-                    ).takeRetainedValue()
+                    )
 
                     let mode = CFRunLoopMode.defaultMode
                     CFRunLoopAddSource(CFRunLoopGetCurrent(), source, mode)
