@@ -31,6 +31,7 @@ public class NatsClientOptions {
     private var clientCertificate: URL? = nil
     private var clientKey: URL? = nil
     private var inboxPrefix: String = "_INBOX."
+    private var name: String = ""
 
     public init() {}
 
@@ -180,6 +181,13 @@ public class NatsClientOptions {
         return self
     }
 
+    /// A name for this connection, reported by server monitoring endpoints (e.g. `/connz`).
+    /// Defaults to an empty string.
+    public func name(_ name: String) -> NatsClientOptions {
+        self.name = name
+        return self
+    }
+
     public func build() -> NatsClient {
         let client = NatsClient()
         client.inboxPrefix = inboxPrefix
@@ -195,7 +203,8 @@ public class NatsClientOptions {
             clientCertificate: clientCertificate,
             clientKey: clientKey,
             rootCertificate: rootCertificate,
-            retryOnFailedConnect: initialReconnect
+            retryOnFailedConnect: initialReconnect,
+            name: name
         )
         return client
     }

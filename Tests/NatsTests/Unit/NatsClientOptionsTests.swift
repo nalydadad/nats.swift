@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import NIO
 import XCTest
 
 @testable import Nats
@@ -21,6 +22,15 @@ class NatsClientOptionsTests: XCTestCase {
         ("testCustomInboxPrefix", testCustomInboxPrefix),
         ("testDefaultPortsInjection", testDefaultPortsInjection),
     ]
+
+    func testConnectionName() {
+        let handler = NatsClientOptions().name("my-app").build().connectionHandler!
+        var buffer = ByteBufferAllocator().buffer(capacity: 0)
+        buffer.writeClientOp(.connect(handler.initialConnectInfo()))
+        let connect = String(buffer: buffer)
+        XCTAssertTrue(
+            connect.contains("\"name\":\"my-app\""), "CONNECT should carry the name: \(connect)")
+    }
 
     func testDefaultInboxPrefix() {
         let client = NatsClientOptions().build()

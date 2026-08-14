@@ -63,6 +63,7 @@ final class ConnectionHandler: Sendable {
     private let rootCertificate: URL?
     private let clientCertificate: URL?
     private let clientKey: URL?
+    private let name: String
 
     private let state = NIOLockedValueBox(NatsState.pending)
     private let subscriptions = NIOLockedValueBox([UInt64: NatsSubscription]())
@@ -122,7 +123,7 @@ final class ConnectionHandler: Sendable {
         retainServersOrder: Bool,
         pingInterval: TimeInterval, auth: Auth?, requireTls: Bool, tlsFirst: Bool,
         clientCertificate: URL?, clientKey: URL?,
-        rootCertificate: URL?, retryOnFailedConnect: Bool
+        rootCertificate: URL?, retryOnFailedConnect: Bool, name: String
     ) {
         self._urls = NIOLockedValueBox(urls)
         self.reconnectWait = UInt64(reconnectWait * 1_000_000_000)
@@ -136,6 +137,7 @@ final class ConnectionHandler: Sendable {
         self.clientKey = clientKey
         self.rootCertificate = rootCertificate
         self.retryOnFailedConnect = retryOnFailedConnect
+        self.name = name
     }
 
     private func handleReceivedChunk(_ data: Data) {
@@ -591,12 +593,17 @@ final class ConnectionHandler: Sendable {
         self.connectedUrl = s
     }
 
-    private func sendClientConnectInit() async throws {
-        var initialConnect = ConnectInfo(
-            verbose: false, pedantic: false, userJwt: nil, nkey: "", name: "", echo: true,
+    /// The CONNECT payload before any authentication signature is applied.
+    internal func initialConnectInfo() -> ConnectInfo {
+        ConnectInfo(
+            verbose: false, pedantic: false, userJwt: nil, nkey: "", name: self.name, echo: true,
             lang: self.lang, version: self.version, natsProtocol: .dynamic, tlsRequired: false,
             user: self.auth?.user ?? "", pass: self.auth?.password ?? "",
             authToken: self.auth?.token ?? "", headers: true, noResponders: true)
+    }
+
+    private func sendClientConnectInit() async throws {
+        var initialConnect = self.initialConnectInfo()
 
         if self.auth?.nkey != nil && self.auth?.nkeyPath != nil {
             throw NatsError.ConnectError.invalidConfig("cannot use both nkey and nkeyPath")
