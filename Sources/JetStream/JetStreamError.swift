@@ -267,7 +267,8 @@ public enum JetStreamError {
                 self = .consumerNameExist(err)
             case ErrorCode.consumerDoesNotExist:
                 self = .consumerDoesNotExist(err)
-            case ErrorCode.consumerDeliverToWildcards,
+            case ErrorCode.consumerCreate,
+                ErrorCode.consumerDeliverToWildcards,
                 ErrorCode.consumerPushMaxWaiting,
                 ErrorCode.consumerDeliverCycle,
                 ErrorCode.consumerMaxPendingAckPolicyRequired,
