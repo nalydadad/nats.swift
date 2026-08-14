@@ -24,10 +24,7 @@ class NatsClientOptionsTests: XCTestCase {
     ]
 
     func testConnectionName() {
-        let handler = NatsClientOptions().name("my-app").build().connectionHandler!
-        var buffer = ByteBufferAllocator().buffer(capacity: 0)
-        buffer.writeClientOp(.connect(handler.initialConnectInfo()))
-        let connect = String(buffer: buffer)
+        let connect = connectString(NatsClientOptions().name("my-app"))
         XCTAssertTrue(
             connect.contains("\"name\":\"my-app\""), "CONNECT should carry the name: \(connect)")
     }
