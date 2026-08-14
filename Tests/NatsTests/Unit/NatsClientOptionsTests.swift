@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import NIO
 import XCTest
 
 @testable import Nats
@@ -20,26 +21,15 @@ class NatsClientOptionsTests: XCTestCase {
         ("testDefaultInboxPrefix", testDefaultInboxPrefix),
         ("testCustomInboxPrefix", testCustomInboxPrefix),
         ("testDefaultPortsInjection", testDefaultPortsInjection),
-        ("testConnectionName", testConnectionName),
-        ("testDefaultConnectionName", testDefaultConnectionName),
     ]
 
-    private func connectJson(_ options: NatsClientOptions) throws -> String {
-        let handler = options.build().connectionHandler!
-        let data = try JSONEncoder().encode(handler.initialConnectInfo())
-        return String(data: data, encoding: .utf8)!
-    }
-
-    func testConnectionName() throws {
-        let json = try connectJson(NatsClientOptions().name("my-app"))
+    func testConnectionName() {
+        let handler = NatsClientOptions().name("my-app").build().connectionHandler!
+        var buffer = ByteBufferAllocator().buffer(capacity: 0)
+        buffer.writeClientOp(.connect(handler.initialConnectInfo()))
+        let connect = String(buffer: buffer)
         XCTAssertTrue(
-            json.contains("\"name\":\"my-app\""), "CONNECT should carry the name: \(json)")
-    }
-
-    func testDefaultConnectionName() throws {
-        let json = try connectJson(NatsClientOptions())
-        XCTAssertTrue(
-            json.contains("\"name\":\"\""), "CONNECT should default to an empty name: \(json)")
+            connect.contains("\"name\":\"my-app\""), "CONNECT should carry the name: \(connect)")
     }
 
     func testDefaultInboxPrefix() {

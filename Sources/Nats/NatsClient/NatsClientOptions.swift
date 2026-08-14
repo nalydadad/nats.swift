@@ -181,9 +181,8 @@ public class NatsClientOptions {
         return self
     }
 
-    /// An optional name label sent to the server on CONNECT to identify the client.
-    /// Server monitoring pages (e.g. `/connz`) display this name when referring to
-    /// this connection. Defaults to an empty string, meaning no name is reported.
+    /// A name for this connection, reported by server monitoring endpoints (e.g. `/connz`).
+    /// Defaults to an empty string.
     public func name(_ name: String) -> NatsClientOptions {
         self.name = name
         return self
