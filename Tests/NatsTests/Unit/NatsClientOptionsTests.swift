@@ -32,6 +32,25 @@ class NatsClientOptionsTests: XCTestCase {
             connect.contains("\"name\":\"my-app\""), "CONNECT should carry the name: \(connect)")
     }
 
+    func testRequireTls() {
+        let secure = connectString(NatsClientOptions().requireTls())
+        XCTAssertTrue(
+            secure.contains("\"tls_required\":true"),
+            "requireTls() should advertise tls_required: \(secure)")
+
+        let plain = connectString(NatsClientOptions())
+        XCTAssertTrue(
+            plain.contains("\"tls_required\":false"),
+            "default should not advertise tls_required: \(plain)")
+    }
+
+    private func connectString(_ options: NatsClientOptions) -> String {
+        let handler = options.build().connectionHandler!
+        var buffer = ByteBufferAllocator().buffer(capacity: 0)
+        buffer.writeClientOp(.connect(handler.initialConnectInfo()))
+        return String(buffer: buffer)
+    }
+
     func testDefaultInboxPrefix() {
         let client = NatsClientOptions().build()
         let inbox = client.newInbox()

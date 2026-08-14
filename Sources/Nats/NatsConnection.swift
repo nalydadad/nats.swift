@@ -597,7 +597,8 @@ final class ConnectionHandler: Sendable {
     internal func initialConnectInfo() -> ConnectInfo {
         ConnectInfo(
             verbose: false, pedantic: false, userJwt: nil, nkey: "", name: self.name, echo: true,
-            lang: self.lang, version: self.version, natsProtocol: .dynamic, tlsRequired: false,
+            lang: self.lang, version: self.version, natsProtocol: .dynamic,
+            tlsRequired: self.requireTls,
             user: self.auth?.user ?? "", pass: self.auth?.password ?? "",
             authToken: self.auth?.token ?? "", headers: true, noResponders: true)
     }
