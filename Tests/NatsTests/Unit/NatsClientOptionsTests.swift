@@ -20,7 +20,27 @@ class NatsClientOptionsTests: XCTestCase {
         ("testDefaultInboxPrefix", testDefaultInboxPrefix),
         ("testCustomInboxPrefix", testCustomInboxPrefix),
         ("testDefaultPortsInjection", testDefaultPortsInjection),
+        ("testConnectionName", testConnectionName),
+        ("testDefaultConnectionName", testDefaultConnectionName),
     ]
+
+    private func connectJson(_ options: NatsClientOptions) throws -> String {
+        let handler = options.build().connectionHandler!
+        let data = try JSONEncoder().encode(handler.initialConnectInfo())
+        return String(data: data, encoding: .utf8)!
+    }
+
+    func testConnectionName() throws {
+        let json = try connectJson(NatsClientOptions().name("my-app"))
+        XCTAssertTrue(
+            json.contains("\"name\":\"my-app\""), "CONNECT should carry the name: \(json)")
+    }
+
+    func testDefaultConnectionName() throws {
+        let json = try connectJson(NatsClientOptions())
+        XCTAssertTrue(
+            json.contains("\"name\":\"\""), "CONNECT should default to an empty name: \(json)")
+    }
 
     func testDefaultInboxPrefix() {
         let client = NatsClientOptions().build()

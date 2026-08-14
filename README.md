@@ -88,10 +88,15 @@ running locally on the default port (4222). You can also customize your connecti
 ```swift
 let nats = NatsClientOptions()
     .url(URL(string: "nats://localhost:4222")!)
+    .name("my-app")
     .build()
 
 try await nats.connect()
 ```
+
+`name` is optional and is sent to the server as part of the connection handshake, so
+this connection is labelled `my-app` on the server's monitoring endpoints (for example
+`/connz`, or `nats server report connections`). It is re-sent on every reconnect.
 
 ### Publishing Messages
 
