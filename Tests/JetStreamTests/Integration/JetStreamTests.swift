@@ -740,6 +740,9 @@ class JetStreamTests: XCTestCase {
             // success
             errOk = true
         }
+        // nats-server only rejects this from 2.13 onwards; older servers
+        // silently accepted the change and this assertion will fail.
+        XCTAssertTrue(errOk, "Expected invalid consumer config error")
 
         // attempt updating non-existing consumer
         errOk = false
@@ -830,6 +833,9 @@ class JetStreamTests: XCTestCase {
             // success
             errOk = true
         }
+        // nats-server only rejects this from 2.13 onwards; older servers
+        // silently accepted the change and this assertion will fail.
+        XCTAssertTrue(errOk, "Expected invalid consumer config error")
 
         // attempt updating non-existing consumer
         errOk = false
