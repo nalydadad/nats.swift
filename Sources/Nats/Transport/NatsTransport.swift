@@ -34,7 +34,10 @@ internal protocol NatsTransport: AnyObject, Sendable {
     /// closed, locally or by the peer.
     var incomingMessages: AsyncThrowingStream<Data, Error> { get }
 
-    func connect(url: URL, tls: TransportTLSOptions?) async throws
+    /// `timeout` bounds establishing the underlying connection. Transports
+    /// whose `connect` returns before the socket is up may ignore it; the
+    /// caller additionally bounds the wait for the server's INFO.
+    func connect(url: URL, tls: TransportTLSOptions?, timeout: TimeInterval) async throws
 
     /// Upgrades an already-open plaintext connection to TLS in place
     /// (`tlsFirst` / server-requested-TLS negotiation for raw NATS). A no-op

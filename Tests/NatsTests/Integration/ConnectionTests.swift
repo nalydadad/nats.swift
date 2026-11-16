@@ -27,6 +27,7 @@ class CoreNatsTests: XCTestCase {
         ("testConnectMultipleURLsOneIsValid", testConnectMultipleURLsOneIsValid),
         ("testConnectMultipleURLsRetainOrder", testConnectMultipleURLsRetainOrder),
         ("testConnectDNSError", testConnectDNSError),
+        ("testConnectTimeoutWaitingForInfo", testConnectTimeoutWaitingForInfo),
         ("testRetryOnFailedConnect", testRetryOnFailedConnect),
         ("testPublishWithReply", testPublishWithReply),
         ("testPublishWithReplyOnCustomInbox", testPublishWithReplyOnCustomInbox),
@@ -231,6 +232,28 @@ class CoreNatsTests: XCTestCase {
             XCTAssertEqual(client.connectedUrl, URL(string: natsServer2.clientURL))
             try await client.close()
         }
+    }
+
+    func testConnectTimeoutWaitingForInfo() async throws {
+        // a TCP server that accepts connections but never sends INFO
+        let server = try await ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton)
+            .bind(host: "127.0.0.1", port: 0).get()
+        defer { server.close(promise: nil) }
+        let port = server.localAddress!.port!
+
+        let client = NatsClientOptions()
+            .url(URL(string: "nats://127.0.0.1:\(port)")!)
+            .connectTimeout(0.5)
+            .build()
+
+        let start = Date()
+        do {
+            try await client.connect()
+            XCTFail("Expected connect to time out")
+        } catch NatsError.ConnectError.timeout {
+            // success
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(start), 5)
     }
 
     func testConnectDNSError() async throws {

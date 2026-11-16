@@ -55,6 +55,7 @@ final class ConnectionHandler: Sendable {
     }
     // nanoseconds representation of TimeInterval
     private let reconnectWait: UInt64
+    private let connectTimeout: TimeInterval
     private let maxReconnects: Int?
     private let retainServersOrder: Bool
     private let pingInterval: TimeInterval
@@ -119,7 +120,8 @@ final class ConnectionHandler: Sendable {
     }
 
     init(
-        urls: [URL], reconnectWait: TimeInterval, maxReconnects: Int?,
+        urls: [URL], reconnectWait: TimeInterval, connectTimeout: TimeInterval,
+        maxReconnects: Int?,
         retainServersOrder: Bool,
         pingInterval: TimeInterval, auth: Auth?, requireTls: Bool, tlsFirst: Bool,
         clientCertificate: URL?, clientKey: URL?,
@@ -127,6 +129,7 @@ final class ConnectionHandler: Sendable {
     ) {
         self._urls = NIOLockedValueBox(urls)
         self.reconnectWait = UInt64(reconnectWait * 1_000_000_000)
+        self.connectTimeout = connectTimeout
         self.maxReconnects = maxReconnects
         self.retainServersOrder = retainServersOrder
         self.auth = auth
@@ -511,11 +514,14 @@ final class ConnectionHandler: Sendable {
 
     private func connectToServer(s: URL) async throws {
         var infoTask: Task<(), Never>? = nil
+        let timeout = self.connectTimeout
+        var timeoutTask: Task<(), Never>? = nil
+        defer { timeoutTask?.cancel() }
         // this continuation can throw NatsError.ServerError if server responds with
         // -ERR to client connect (e.g. auth error)
         let info: ServerInfo = try await withCheckedThrowingContinuation { continuation in
             serverInfoContinuation.withLockedValue { $0 = continuation }
-            infoTask = Task {
+            let task = Task {
                 await withTaskCancellationHandler {
                     do {
                         guard s.host != nil, s.port != nil else {
@@ -541,7 +547,13 @@ final class ConnectionHandler: Sendable {
                             rootCertificate: self.rootCertificate,
                             clientCertificate: self.clientCertificate,
                             clientKey: self.clientKey)
-                        try await newTransport.connect(url: s, tls: tls)
+                        try await newTransport.connect(url: s, tls: tls, timeout: timeout)
+                        // timed out/cancelled while connecting: don't adopt
+                        // a transport nobody is waiting for
+                        if Task.isCancelled {
+                            newTransport.close()
+                            throw NatsError.ClientError.cancelled
+                        }
 
                         if self.requireTls && self.tlsFirst {
                             try newTransport.startSecureConnection()
@@ -578,6 +590,24 @@ final class ConnectionHandler: Sendable {
                         continuation.resume(throwing: NatsError.ClientError.cancelled)
                     }
                 }
+            }
+            infoTask = task
+            // Bounds the transport connect plus the wait for the server INFO.
+            timeoutTask = Task {
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                if Task.isCancelled { return }
+                let continuationToResume: CheckedContinuation<ServerInfo, Error>? = self
+                    .serverInfoContinuation.withLockedValue { cont in
+                        guard let c = cont else { return nil }
+                        cont = nil
+                        return c
+                    }
+                guard let continuationToResume else { return }
+                continuationToResume.resume(throwing: NatsError.ConnectError.timeout)
+                task.cancel()
+                // infoTask may already be done (connected, INFO never came),
+                // in which case its cancellation handler won't close this.
+                self.transport?.close()
             }
         }
 
