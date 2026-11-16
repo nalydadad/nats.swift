@@ -21,6 +21,7 @@ public class NatsClientOptions {
     private var urls: [URL] = []
     private var pingInterval: TimeInterval = 60.0
     private var reconnectWait: TimeInterval = 2.0
+    private var connectTimeout: TimeInterval = 30.0
     private var maxReconnects: Int?
     private var initialReconnect = false
     private var noRandomize = false
@@ -67,6 +68,14 @@ public class NatsClientOptions {
     /// Defaults to 60s.
     public func pingInterval(_ pingInterval: TimeInterval) -> NatsClientOptions {
         self.pingInterval = pingInterval
+        return self
+    }
+
+    /// Maximum time to wait for a single connection attempt to a server
+    /// (establishing the connection and receiving the server's INFO).
+    /// Defaults to 30s.
+    public func connectTimeout(_ connectTimeout: TimeInterval) -> NatsClientOptions {
+        self.connectTimeout = connectTimeout
         return self
     }
 
@@ -194,6 +203,7 @@ public class NatsClientOptions {
         client.connectionHandler = ConnectionHandler(
             urls: urls,
             reconnectWait: reconnectWait,
+            connectTimeout: connectTimeout,
             maxReconnects: maxReconnects,
             retainServersOrder: noRandomize,
             pingInterval: pingInterval,

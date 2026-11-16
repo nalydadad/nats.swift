@@ -38,7 +38,7 @@ internal final class URLSessionWebSocketTransport: NSObject, NatsTransport, @unc
         continuationBox.withLockedValue { $0 = continuation }
     }
 
-    func connect(url: URL, tls: TransportTLSOptions?) async throws {
+    func connect(url: URL, tls: TransportTLSOptions?, timeout: TimeInterval) async throws {
         let configuration = URLSessionConfiguration.default
         #if canImport(Security)
             let delegate: TLSChallengeDelegate? = try TLSChallengeDelegate(tls: tls)

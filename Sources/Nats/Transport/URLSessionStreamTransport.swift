@@ -44,7 +44,7 @@
             continuationBox.withLockedValue { $0 = continuation }
         }
 
-        func connect(url: URL, tls: TransportTLSOptions?) async throws {
+        func connect(url: URL, tls: TransportTLSOptions?, timeout: TimeInterval) async throws {
             guard let host = url.host, let port = url.port else {
                 throw NatsError.ConnectError.invalidConfig("no url")
             }
@@ -135,11 +135,12 @@
 
         func close() {
             receiveLoopBox.withLockedValue { $0?.cancel() }
-            if let task = taskBox.withLockedValue({ $0 }) {
-                task.closeWrite()
-                task.closeRead()
-            }
-            sessionBox.withLockedValue { $0?.finishTasksAndInvalidate() }
+            // cancel rather than closeWrite/closeRead + finishTasksAndInvalidate:
+            // those wait for pending I/O, which never completes on a dead
+            // network path (e.g. after a Wi-Fi/cellular switch), leaking the
+            // old connection.
+            taskBox.withLockedValue { $0?.cancel() }
+            sessionBox.withLockedValue { $0?.invalidateAndCancel() }
             finish(throwing: nil)
         }
     }

@@ -75,7 +75,7 @@
             continuationBox.withLockedValue { $0 = continuation }
         }
 
-        func connect(url: URL, tls: TransportTLSOptions?) async throws {
+        func connect(url: URL, tls: TransportTLSOptions?, timeout: TimeInterval) async throws {
             guard let host = url.host, let port = url.port else {
                 throw NatsError.ConnectError.invalidConfig("no url")
             }
@@ -93,7 +93,7 @@
                         onClose: { [weak self] error in self?.finish(throwing: error) })
                     return channel.pipeline.addHandler(handler)
                 }
-                .connectTimeout(.seconds(5))
+                .connectTimeout(.nanoseconds(Int64(timeout * 1_000_000_000)))
 
             let channel = try await bootstrap.connect(host: host, port: port).get()
             channelBox.withLockedValue { $0 = channel }

@@ -47,17 +47,13 @@
         private let connectContinuation = NIOLockedValueBox<CheckedContinuation<Void, Error>?>(nil)
         private let queue = DispatchQueue(label: "io.nats.swift.nw-websocket")
 
-        // Bound an initial connect so a stuck handshake doesn't hang the NATS
-        // connect attempt (the NATS layer retries on failure).
-        private let connectTimeout: TimeInterval = 30
-
         init() {
             var continuation: AsyncThrowingStream<Data, Error>.Continuation!
             self.incomingMessages = AsyncThrowingStream { continuation = $0 }
             continuationBox.withLockedValue { $0 = continuation }
         }
 
-        func connect(url: URL, tls: TransportTLSOptions?) async throws {
+        func connect(url: URL, tls: TransportTLSOptions?, timeout: TimeInterval) async throws {
             let parameters = try makeParameters(url: url, tls: tls)
 
             let connection = NWConnection(to: .url(url), using: parameters)
@@ -81,9 +77,10 @@
                             connection.cancel()
                         }
                     }
+                    // Bound the connect so a stuck handshake doesn't hang the
+                    // NATS connect attempt (the NATS layer retries on failure).
                     group.addTask {
-                        try await Task.sleep(
-                            nanoseconds: UInt64(self.connectTimeout * 1_000_000_000))
+                        try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
                         throw NatsError.ConnectError.timeout
                     }
                     // Wait for whichever finishes first, then cancel the rest.
